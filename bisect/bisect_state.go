@@ -17,7 +17,9 @@ func (s *smartRev) Good() {
 }
 
 func (s *smartRev) Bad() {
+	fmt.Println("marking as bad", s.Rev, s.state)
 	s.state.markAsBad(s.Rev)
+	fmt.Println("marked as bad", s.Rev, s.state)
 }
 
 type BisectState struct {
@@ -38,15 +40,16 @@ type BisectState struct {
 	bisectMu        sync.Mutex
 
 	activeListenersMu sync.Mutex
-	activeListeners   []*smartRev
+	activeListeners   map[int]*smartRev
 }
 
 func NewBisectState(revs []string) *BisectState {
 	state := &BisectState{
-		revs:        revs,
-		end:         len(revs) - 1,
-		indexes:     make(map[string]int),
-		bisectSteps: make([]int, len(revs)),
+		revs:            revs,
+		end:             len(revs) - 1,
+		indexes:         make(map[string]int, len(revs)),
+		bisectSteps:     make([]int, len(revs)),
+		activeListeners: make(map[int]*smartRev, len(revs)),
 	}
 
 	state.initIndexesTable()
@@ -78,14 +81,19 @@ func (b *BisectState) Next() *smartRev {
 	for ; b.bisectIteration < len(b.bisectSteps); b.bisectIteration++ {
 		step := b.bisectSteps[b.bisectIteration]
 		if step >= b.start && step <= b.end {
-			// TODO implement ref cancellation
-			rev := b.revs[step]
+
 			b.bisectIteration++
-			return &smartRev{
-				Rev:    rev,
+			rev := &smartRev{
+				Rev:    b.revs[step],
 				Cancel: make(chan interface{}),
 				state:  b,
 			}
+
+			b.activeListenersMu.Lock()
+			defer b.activeListenersMu.Unlock()
+			b.activeListeners[step] = rev
+
+			return rev
 		}
 	}
 	return nil
@@ -110,12 +118,14 @@ func (b *BisectState) markAsGood(rev string) error {
 
 	b.startMu.Lock()
 	defer b.startMu.Unlock()
+	defer b.notifyActiveListeners()
 	b.start = i
 	return nil
 }
 
 func (b *BisectState) markAsBad(rev string) error {
 	i := b.getIndex(rev)
+	fmt.Println("got: ", i)
 
 	if i >= b.end {
 		return nil
@@ -127,8 +137,21 @@ func (b *BisectState) markAsBad(rev string) error {
 
 	b.endMu.Lock()
 	defer b.endMu.Unlock()
+	defer b.notifyActiveListeners()
 	b.end = i
 	return nil
+}
+
+func (b *BisectState) notifyActiveListeners() {
+	b.activeListenersMu.Lock()
+	defer b.activeListenersMu.Unlock()
+
+	for i := range b.activeListeners {
+		if i < b.start || i > b.end {
+			defer delete(b.activeListeners, i)
+			b.activeListeners[i].Cancel <- struct{}{}
+		}
+	}
 }
 
 func (b *BisectState) FirstBadRev() *string {
