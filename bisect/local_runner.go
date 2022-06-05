@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -55,10 +56,15 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 				cancelJob()
 			}()
 			go func() {
-				if l.checkRev(jobCtx, rev.Rev, cmd) {
+				// https://git-scm.com/docs/git-bisect
+				exitCode := l.checkRev(jobCtx, rev.Rev, cmd)
+				if exitCode == 0 {
 					rev.Good()
-				} else {
+				} else if exitCode > 0 && exitCode <= 127 && exitCode != 125 {
 					rev.Bad()
+				} else if exitCode != -1 {
+					// -1 is caused by the context being cancelled and thus should be ignored
+					panic(fmt.Sprintf("Unexpected exit code %d", exitCode))
 				}
 				cancelJob()
 			}()
@@ -73,7 +79,7 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 	return runState
 }
 
-func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) bool {
+func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) int {
 	wpPath := path.Join(settings.BisectWorkspacePath, rev)
 	_ = os.Mkdir(wpPath, os.ModePerm)
 	defer os.RemoveAll(wpPath)
@@ -116,5 +122,5 @@ func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) bo
 	// 	doSomething()
 	// }
 
-	return runnableCmd.ProcessState.ExitCode() == 0
+	return runnableCmd.ProcessState.ExitCode()
 }
