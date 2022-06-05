@@ -9,17 +9,11 @@ type RunnerState struct {
 	done chan string
 }
 
-func NewStartedRunnerState(revs []string) *RunnerState {
+func NewStartedRunnerState() *RunnerState {
 	left := make(chan []string)
 	wip := make(chan []string)
 	err := make(chan error)
 	done := make(chan string)
-	defer func() {
-		go func() {
-			left <- revs
-			wip <- []string{}
-		}()
-	}()
 
 	return &RunnerState{
 		left: left,

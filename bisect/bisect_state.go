@@ -1,7 +1,6 @@
 package bisect
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 )
@@ -17,30 +16,25 @@ func (s *smartRev) Good() {
 }
 
 func (s *smartRev) Bad() {
-	fmt.Println("marking as bad", s.Rev, s.state)
 	s.state.markAsBad(s.Rev)
-	fmt.Println("marked as bad", s.Rev, s.state)
 }
 
 type BisectState struct {
 	revs []string // immutable
 
-	indexes   map[string]int // written once but it's async
-	indexesMu sync.RWMutex
+	indexes map[string]int
 
-	start   int
-	startMu sync.RWMutex
+	start int
 
-	end   int
-	endMu sync.RWMutex
+	end int
 
 	// bisect tracker
 	bisectSteps     []int
 	bisectIteration int
-	bisectMu        sync.Mutex
 
-	activeListenersMu sync.Mutex
-	activeListeners   map[int]*smartRev
+	activeListeners map[int]*smartRev
+
+	mu sync.RWMutex
 }
 
 func NewBisectState(revs []string) *BisectState {
@@ -76,8 +70,13 @@ func (b *BisectState) initBisectSteps() {
 }
 
 func (b *BisectState) Next() *smartRev {
-	b.bisectMu.Lock()
-	defer b.bisectMu.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if (b.end - b.start) <= 1 {
+		return nil
+	}
+
 	for ; b.bisectIteration < len(b.bisectSteps); b.bisectIteration++ {
 		step := b.bisectSteps[b.bisectIteration]
 		if step >= b.start && step <= b.end {
@@ -89,8 +88,6 @@ func (b *BisectState) Next() *smartRev {
 				state:  b,
 			}
 
-			b.activeListenersMu.Lock()
-			defer b.activeListenersMu.Unlock()
 			b.activeListeners[step] = rev
 
 			return rev
@@ -100,52 +97,44 @@ func (b *BisectState) Next() *smartRev {
 }
 
 func (b *BisectState) getIndex(rev string) int {
-	b.indexesMu.RLock()
-	defer b.indexesMu.RUnlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.indexes[rev]
 }
 
 func (b *BisectState) markAsGood(rev string) error {
 	i := b.getIndex(rev)
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	if i <= b.start {
 		return nil
 	}
 
-	if i >= b.end {
-		return fmt.Errorf("TODO(come up with an error msg)")
-	}
-
-	b.startMu.Lock()
-	defer b.startMu.Unlock()
-	defer b.notifyActiveListeners()
 	b.start = i
+
+	defer b.notifyActiveListeners()
 	return nil
 }
 
 func (b *BisectState) markAsBad(rev string) error {
 	i := b.getIndex(rev)
-	fmt.Println("got: ", i)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	if i >= b.end {
 		return nil
 	}
 
-	if i <= b.start {
-		return fmt.Errorf("TODO(come up with an error msg)")
-	}
-
-	b.endMu.Lock()
-	defer b.endMu.Unlock()
-	defer b.notifyActiveListeners()
 	b.end = i
+
+	defer b.notifyActiveListeners()
 	return nil
 }
 
 func (b *BisectState) notifyActiveListeners() {
-	b.activeListenersMu.Lock()
-	defer b.activeListenersMu.Unlock()
-
 	for i := range b.activeListeners {
 		if i < b.start || i > b.end {
 			defer delete(b.activeListeners, i)
@@ -155,13 +144,10 @@ func (b *BisectState) notifyActiveListeners() {
 }
 
 func (b *BisectState) FirstBadRev() *string {
-	b.startMu.RLock()
-	defer b.startMu.RUnlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
-	b.endMu.RLock()
-	defer b.endMu.RUnlock()
-
-	if b.end-b.start == 1 {
+	if (b.end - b.start) <= 1 {
 		return &b.revs[b.end]
 	}
 

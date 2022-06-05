@@ -24,11 +24,12 @@ type bisect struct {
 }
 
 func NewBisect(opts BisectOpts) *bisect {
-	runner := NewLocalRunner()
+	runner := NewLocalRunner(opts.Jobs)
 	return &bisect{
 		jobs:   opts.Jobs,
 		good:   opts.Good,
 		bad:    opts.Bad,
+		cmd:    opts.Cmd,
 		runner: runner,
 	}
 }
@@ -41,7 +42,7 @@ func (b bisect) Run(ctx context.Context) error {
 		return fmt.Errorf("could not get the list of revisions: %v", err)
 	}
 
-	revisions := strings.Split(gitLogOut.String(), "\n")
+	revisions := strings.Split(strings.TrimSpace(gitLogOut.String()), "\n")
 	runState := b.runner.Run(ctx, revisions, b.cmd)
 
 	for {

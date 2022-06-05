@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/TheGrizzlyDev/git-analyse/bisect"
 )
@@ -42,7 +41,8 @@ func main() {
 		})
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+	// ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+	ctx := context.TODO()
 	if err := cmd.Run(ctx); err != nil {
 		panic(err)
 	}
