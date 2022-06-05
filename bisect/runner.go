@@ -3,23 +3,26 @@ package bisect
 import "context"
 
 type RunnerState struct {
-	left chan []string
-	wip  chan []string
-	err  chan error
-	done chan string
+	stats chan *BisectStats
+	err   chan error
+	done  chan string
+}
+
+type BisectStats struct {
+	Pending int
+	Left    int
+	Total   int
 }
 
 func NewStartedRunnerState() *RunnerState {
-	left := make(chan []string)
-	wip := make(chan []string)
+	stats := make(chan *BisectStats)
 	err := make(chan error)
 	done := make(chan string)
 
 	return &RunnerState{
-		left: left,
-		wip:  wip,
-		err:  err,
-		done: done,
+		stats: stats,
+		err:   err,
+		done:  done,
 	}
 }
 

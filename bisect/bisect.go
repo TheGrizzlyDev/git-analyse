@@ -45,12 +45,11 @@ func (b bisect) Run(ctx context.Context) error {
 	revisions := append(strings.Split(strings.TrimSpace(gitLogOut.String()), "\n"), b.good)
 	runState := b.runner.Run(ctx, revisions, b.cmd)
 
+	fmt.Println()
 	for {
 		select {
-		case wip := <-runState.wip:
-			fmt.Printf("WIP (%d): %s\n", len(wip), wip)
-		case left := <-runState.left:
-			fmt.Printf("Left (%d): %s\n", len(left), left)
+		case stats := <-runState.stats:
+			fmt.Printf("\033[1A\033[K%d revisions left out of %d\n", stats.Left, stats.Total)
 		case err := <-runState.err:
 			return err
 		case found := <-runState.done:

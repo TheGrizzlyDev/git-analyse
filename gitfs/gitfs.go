@@ -39,6 +39,9 @@ func (g *gitfs) Ls(ctx context.Context, rev string) ([]*FileRevision, error) {
 	revs := []*FileRevision{}
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
 		fields := strings.Fields(line)
+		if len(fields) != 4 {
+			continue
+		}
 		hash, path := fields[2], fields[3]
 		if fileMode, err := strconv.ParseInt(fields[0][2:], 8, 32); err != nil {
 			return nil, err

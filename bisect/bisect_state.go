@@ -144,3 +144,18 @@ func (b *BisectState) notifyActiveListeners() {
 		b.Done <- b.revs[b.bad]
 	}
 }
+
+func (b *BisectState) Stats() *BisectStats {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	revs := len(b.revs)
+	left := revs - b.bisectIteration
+	if left < 0 {
+		left = 0
+	}
+	return &BisectStats{
+		Pending: len(b.activeListeners),
+		Left:    left,
+		Total:   revs,
+	}
+}

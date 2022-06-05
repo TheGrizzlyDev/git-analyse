@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/TheGrizzlyDev/git-analyse/gitfs"
 	"github.com/TheGrizzlyDev/git-analyse/settings"
@@ -63,12 +64,12 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 			}()
 		}
 	}()
-	// go func() {
-	// 	ticker := time.NewTicker(time.Second / 24)
-	// 	for _ = range ticker.C {
-	// 		l.updateState(state)
-	// 	}
-	// }()
+	go func() {
+		ticker := time.NewTicker(time.Second / 24)
+		for _ = range ticker.C {
+			runState.stats <- bisectState.Stats()
+		}
+	}()
 	return runState
 }
 
