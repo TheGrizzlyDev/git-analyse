@@ -19,6 +19,13 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 	runState := NewStartedRunnerState()
 	bisectState := NewBisectState(revs)
 	jobsGuard := make(chan struct{}, l.jobs)
+	runCtx, cancelRun := context.WithCancel(ctx)
+
+	go func() {
+		runState.done <- <-bisectState.Done
+		cancelRun()
+	}()
+
 	go func() {
 		for {
 			jobsGuard <- struct{}{}
@@ -27,7 +34,7 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 				break
 			}
 
-			jobCtx, cancelJob := context.WithCancel(ctx)
+			jobCtx, cancelJob := context.WithCancel(runCtx)
 			go func() {
 				<-jobCtx.Done()
 				<-jobsGuard
@@ -45,8 +52,6 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 				cancelJob()
 			}()
 		}
-
-		runState.done <- *bisectState.FirstBadRev()
 	}()
 	// go func() {
 	// 	ticker := time.NewTicker(time.Second / 24)

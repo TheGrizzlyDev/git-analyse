@@ -36,13 +36,13 @@ func NewBisect(opts BisectOpts) *bisect {
 
 func (b bisect) Run(ctx context.Context) error {
 	var gitLogOut bytes.Buffer
-	gitLog := exec.CommandContext(ctx, "git", "log", "--format=%h", "--ancestry-path", fmt.Sprintf("%s~1..%s", b.good, b.bad))
+	gitLog := exec.CommandContext(ctx, "git", "log", "--format=%H", "--ancestry-path", fmt.Sprintf("%s..%s", b.good, b.bad))
 	gitLog.Stdout = &gitLogOut
 	if err := gitLog.Run(); err != nil {
 		return fmt.Errorf("could not get the list of revisions: %v", err)
 	}
 
-	revisions := strings.Split(strings.TrimSpace(gitLogOut.String()), "\n")
+	revisions := append(strings.Split(strings.TrimSpace(gitLogOut.String()), "\n"), b.good)
 	runState := b.runner.Run(ctx, revisions, b.cmd)
 
 	for {

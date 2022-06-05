@@ -35,6 +35,8 @@ type BisectState struct {
 	activeListeners map[int]*smartRev
 
 	mu sync.RWMutex
+
+	Done chan string
 }
 
 func NewBisectState(revs []string) *BisectState {
@@ -44,6 +46,7 @@ func NewBisectState(revs []string) *BisectState {
 		indexes:         make(map[string]int, len(revs)),
 		bisectSteps:     make([]int, len(revs)),
 		activeListeners: make(map[int]*smartRev, len(revs)),
+		Done:            make(chan string),
 	}
 
 	state.initIndexesTable()
@@ -141,15 +144,8 @@ func (b *BisectState) notifyActiveListeners() {
 			b.activeListeners[i].Cancel <- struct{}{}
 		}
 	}
-}
-
-func (b *BisectState) FirstBadRev() *string {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 
 	if (b.end - b.start) <= 1 {
-		return &b.revs[b.end]
+		b.Done <- b.revs[b.end]
 	}
-
-	return nil
 }
