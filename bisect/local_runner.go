@@ -103,6 +103,8 @@ func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) bo
 	}
 
 	var out bytes.Buffer
+
+	// TODO If the context expires this will send a sigkill which would change the exit code
 	runnableCmd := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 	runnableCmd.Dir = wpPath
 	runnableCmd.Stdout = &out

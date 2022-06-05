@@ -75,10 +75,6 @@ func (b *BisectState) Next() *smartRev {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if (b.good - b.bad) <= 1 {
-		return nil
-	}
-
 	for ; b.bisectIteration < len(b.bisectSteps); b.bisectIteration++ {
 		step := b.bisectSteps[b.bisectIteration]
 		if step >= b.bad && step <= b.good {

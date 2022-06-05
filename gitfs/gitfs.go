@@ -33,12 +33,8 @@ func (g *gitfs) Ls(ctx context.Context, rev string) ([]*FileRevision, error) {
 	var out bytes.Buffer
 
 	execCmd := exec.CommandContext(ctx, "git", "ls-tree", "-r", "--full-name", rev)
-
 	execCmd.Stdout = &out
-
-	if err := execCmd.Run(); err != nil {
-		return nil, err
-	}
+	_ = execCmd.Run()
 
 	revs := []*FileRevision{}
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
