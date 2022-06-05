@@ -22,8 +22,6 @@ type command interface {
 }
 
 func main() {
-	fmt.Println(os.Args)
-
 	if len(os.Args) < 2 {
 		fmt.Println("expected 'bisect' subcommand")
 		os.Exit(1)
@@ -41,7 +39,6 @@ func main() {
 		})
 	}
 
-	// ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
 	ctx := context.TODO()
 	if err := cmd.Run(ctx); err != nil {
 		panic(err)

@@ -65,7 +65,7 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) bool {
 	var out bytes.Buffer
 
-	execCmd := exec.Command("git", "ls-tree", "-r", "--full-name", rev)
+	execCmd := exec.CommandContext(ctx, "git", "ls-tree", "-r", "--full-name", rev)
 
 	execCmd.Stdout = &out
 
