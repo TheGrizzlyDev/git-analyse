@@ -8,6 +8,7 @@ import (
 	"runtime"
 
 	"github.com/TheGrizzlyDev/git-analyse/bisect"
+	_ "github.com/TheGrizzlyDev/git-analyse/settings"
 )
 
 var (

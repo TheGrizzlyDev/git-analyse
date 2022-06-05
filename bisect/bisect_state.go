@@ -24,9 +24,8 @@ type BisectState struct {
 
 	indexes map[string]int
 
-	start int
-
-	end int
+	good int
+	bad  int
 
 	// bisect tracker
 	bisectSteps     []int
@@ -42,7 +41,7 @@ type BisectState struct {
 func NewBisectState(revs []string) *BisectState {
 	state := &BisectState{
 		revs:            revs,
-		end:             len(revs) - 1,
+		good:            len(revs) - 1,
 		indexes:         make(map[string]int, len(revs)),
 		bisectSteps:     make([]int, len(revs)),
 		activeListeners: make(map[int]*smartRev, len(revs)),
@@ -76,13 +75,13 @@ func (b *BisectState) Next() *smartRev {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if (b.end - b.start) <= 1 {
+	if (b.good - b.bad) <= 1 {
 		return nil
 	}
 
 	for ; b.bisectIteration < len(b.bisectSteps); b.bisectIteration++ {
 		step := b.bisectSteps[b.bisectIteration]
-		if step >= b.start && step <= b.end {
+		if step >= b.bad && step <= b.good {
 
 			b.bisectIteration++
 			rev := &smartRev{
@@ -111,11 +110,11 @@ func (b *BisectState) markAsGood(rev string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if i <= b.start {
+	if i >= b.good {
 		return nil
 	}
 
-	b.start = i
+	b.good = i
 
 	defer b.notifyActiveListeners()
 	return nil
@@ -127,11 +126,11 @@ func (b *BisectState) markAsBad(rev string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if i >= b.end {
+	if i <= b.bad {
 		return nil
 	}
 
-	b.end = i
+	b.bad = i
 
 	defer b.notifyActiveListeners()
 	return nil
@@ -139,13 +138,13 @@ func (b *BisectState) markAsBad(rev string) error {
 
 func (b *BisectState) notifyActiveListeners() {
 	for i := range b.activeListeners {
-		if i < b.start || i > b.end {
+		if i < b.bad || i > b.good {
 			defer delete(b.activeListeners, i)
 			b.activeListeners[i].Cancel <- struct{}{}
 		}
 	}
 
-	if (b.end - b.start) <= 1 {
-		b.Done <- b.revs[b.end]
+	if (b.good - b.bad) <= 1 {
+		b.Done <- b.revs[b.bad]
 	}
 }
