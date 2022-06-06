@@ -9,9 +9,11 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/TheGrizzlyDev/git-analyse/gitfs"
+	"github.com/TheGrizzlyDev/git-analyse/pool"
 	"github.com/TheGrizzlyDev/git-analyse/settings"
 )
 
@@ -20,17 +22,20 @@ var (
 )
 
 type LocalRunner struct {
-	jobs int
+	actionPool         *pool.Pool
+	fsProvisioningPool *pool.Pool
 }
 
 func NewLocalRunner(jobs int) *LocalRunner {
-	return &LocalRunner{jobs: jobs}
+	return &LocalRunner{
+		actionPool:         pool.NewPool(jobs),
+		fsProvisioningPool: pool.NewPool(runtime.NumCPU() * 2),
+	}
 }
 
 func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *RunnerState {
 	runState := NewStartedRunnerState()
 	bisectState := NewBisectState(revs)
-	jobsGuard := make(chan struct{}, l.jobs)
 	runCtx, cancelRun := context.WithCancel(ctx)
 
 	go func() {
@@ -40,7 +45,6 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 
 	go func() {
 		for {
-			jobsGuard <- struct{}{}
 			rev := bisectState.Next()
 			if rev == nil {
 				break
@@ -48,14 +52,10 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 
 			jobCtx, cancelJob := context.WithCancel(runCtx)
 			go func() {
-				<-jobCtx.Done()
-				<-jobsGuard
-			}()
-			go func() {
 				<-rev.Cancel
 				cancelJob()
 			}()
-			go func() {
+			l.actionPool.Enqueue(ctx, func() {
 				// https://git-scm.com/docs/git-bisect
 				exitCode := l.checkRev(jobCtx, rev.Rev, cmd)
 				if exitCode == 0 {
@@ -66,8 +66,7 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 					// -1 is caused by the context being cancelled and thus should be ignored
 					panic(fmt.Sprintf("Unexpected exit code %d", exitCode))
 				}
-				cancelJob()
-			}()
+			})
 		}
 	}()
 	go func() {
@@ -87,39 +86,24 @@ func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) in
 	if err != nil {
 		panic(err)
 	}
-	fsProvisioningJobs := 4
-	if fsProvisioningJobs >= len(trackedFiles) {
-		fsProvisioningJobs = 1
-	}
-	fsProvisioningJobsCompleted := make(chan struct{})
-	for fsJob := 0; fsJob < fsProvisioningJobs; fsJob++ {
-		// TODO clean this up
-		go func(fsJob int) {
-			for i := fsJob; i < len(trackedFiles); i += fsProvisioningJobs {
-				trackedFile := trackedFiles[i]
-				dest := path.Join(wpPath, trackedFile.Path)
 
-				if _, err := os.Stat(dest); err == nil {
-					continue
-				} else if trackedFile.Mode.IsDir() {
-					os.MkdirAll(dest, os.ModePerm)
-				} else if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
-					parent := filepath.Dir(dest)
-					if _, err := os.Stat(parent); err != nil && errors.Is(err, os.ErrNotExist) {
-						os.MkdirAll(parent, os.ModePerm)
-					}
-					err := trackedFile.Link(ctx, dest)
-					if err != nil {
-						panic(err)
-					}
-				}
+	pool.ForEach(ctx, l.fsProvisioningPool, trackedFiles, func(trackedFile *gitfs.FileRevision) {
+		dest := path.Join(wpPath, trackedFile.Path)
+		if _, err := os.Stat(dest); err == nil {
+			return
+		} else if trackedFile.Mode.IsDir() {
+			os.MkdirAll(dest, os.ModePerm)
+		} else if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+			parent := filepath.Dir(dest)
+			if _, err := os.Stat(parent); err != nil && errors.Is(err, os.ErrNotExist) {
+				os.MkdirAll(parent, os.ModePerm)
 			}
-			fsProvisioningJobsCompleted <- struct{}{}
-		}(fsJob)
-	}
-	for fsJob := 0; fsJob < fsProvisioningJobs; fsJob++ {
-		<-fsProvisioningJobsCompleted
-	}
+			err := trackedFile.Link(ctx, dest)
+			if err != nil {
+				panic(err)
+			}
+		}
+	})
 
 	var out bytes.Buffer
 
