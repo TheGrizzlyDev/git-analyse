@@ -82,31 +82,43 @@ func (l *LocalRunner) Run(ctx context.Context, revs []string, cmd []string) *Run
 func (l *LocalRunner) checkRev(ctx context.Context, rev string, cmd []string) int {
 	wpPath := path.Join(settings.BisectWorkspacePath, rev)
 	_ = os.Mkdir(wpPath, os.ModePerm)
-	defer os.RemoveAll(wpPath)
 
 	trackedFiles, err := gitfsClient.Ls(ctx, rev)
 	if err != nil {
 		panic(err)
 	}
-	for _, trackedFile := range trackedFiles {
-		// TODO parallelize this
+	fsProvisioningJobs := 4
+	if fsProvisioningJobs >= len(trackedFiles) {
+		fsProvisioningJobs = 1
+	}
+	fsProvisioningJobsCompleted := make(chan struct{})
+	for fsJob := 0; fsJob < fsProvisioningJobs; fsJob++ {
 		// TODO clean this up
-		dest := path.Join(wpPath, trackedFile.Path)
+		go func(fsJob int) {
+			for i := fsJob; i < len(trackedFiles); i += fsProvisioningJobs {
+				trackedFile := trackedFiles[i]
+				dest := path.Join(wpPath, trackedFile.Path)
 
-		if _, err := os.Stat(dest); err == nil {
-			continue
-		} else if trackedFile.Mode.IsDir() {
-			os.MkdirAll(dest, os.ModePerm)
-		} else if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
-			parent := filepath.Dir(dest)
-			if _, err := os.Stat(parent); err != nil && errors.Is(err, os.ErrNotExist) {
-				os.MkdirAll(parent, os.ModePerm)
+				if _, err := os.Stat(dest); err == nil {
+					continue
+				} else if trackedFile.Mode.IsDir() {
+					os.MkdirAll(dest, os.ModePerm)
+				} else if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+					parent := filepath.Dir(dest)
+					if _, err := os.Stat(parent); err != nil && errors.Is(err, os.ErrNotExist) {
+						os.MkdirAll(parent, os.ModePerm)
+					}
+					err := trackedFile.Link(ctx, dest)
+					if err != nil {
+						panic(err)
+					}
+				}
 			}
-			err := trackedFile.Link(ctx, dest)
-			if err != nil {
-				panic(err)
-			}
-		}
+			fsProvisioningJobsCompleted <- struct{}{}
+		}(fsJob)
+	}
+	for fsJob := 0; fsJob < fsProvisioningJobs; fsJob++ {
+		<-fsProvisioningJobsCompleted
 	}
 
 	var out bytes.Buffer

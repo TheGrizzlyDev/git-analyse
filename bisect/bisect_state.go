@@ -65,10 +65,20 @@ func (b *BisectState) initBisectSteps() {
 		b.bisectSteps[i] = i
 	}
 
+	// Fully random
 	rand.Seed(1)
 	rand.Shuffle(len(b.bisectSteps), func(i, j int) {
 		b.bisectSteps[i], b.bisectSteps[j] = b.bisectSteps[j], b.bisectSteps[i]
 	})
+
+	// Middle chunk moved to start and randomized
+	// rand.Seed(1)
+	// chunk := len(b.bisectSteps) / 4
+	// middleChunk := b.bisectSteps[chunk : chunk*3]
+	// rand.Shuffle(len(middleChunk), func(i, j int) {
+	// 	middleChunk[i], middleChunk[j] = middleChunk[j], middleChunk[i]
+	// })
+	// b.bisectSteps = append(middleChunk, append(b.bisectSteps[:chunk-1], b.bisectSteps[chunk*3+1:]...)...)
 }
 
 func (b *BisectState) Next() *smartRev {

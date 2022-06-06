@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/pprof"
 
 	"github.com/TheGrizzlyDev/git-analyse/bisect"
 	_ "github.com/TheGrizzlyDev/git-analyse/settings"
@@ -16,6 +17,9 @@ var (
 	jobs      = bisectCmd.Int("jobs", runtime.NumCPU(), "how many jobs can you run concurrently")
 	goodRev   = bisectCmd.String("good", "", "last known good revision")
 	badRev    = bisectCmd.String("bad", "", "first known bad revision")
+
+	// internal
+	profiled = ""
 )
 
 type command interface {
@@ -38,6 +42,17 @@ func main() {
 			Bad:  *badRev,
 			Cmd:  bisectCmd.Args(),
 		})
+	}
+
+	if profiled != "" {
+		fmt.Printf("Profiling on %s\n", profiled)
+		f, err := os.Create(profiled)
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+
+		defer pprof.StopCPUProfile()
 	}
 
 	ctx := context.TODO()
